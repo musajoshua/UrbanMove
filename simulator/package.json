@@ -1,0 +1,6 @@
+{
+  "name": "@urbanmove/simulator",
+  "version": "1.0.0",
+  "scripts": { "start": "tsx index.ts", "start:fast": "RATE=50 tsx index.ts", "start:slow": "RATE=2 tsx index.ts" },
+  "devDependencies": { "tsx": "^4.7.0", "typescript": "^5.4.0" }
+}

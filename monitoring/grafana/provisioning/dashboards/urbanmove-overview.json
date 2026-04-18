@@ -1,0 +1,262 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "urbanmove-overview",
+    "title": "UrbanMove Platform Overview",
+    "tags": ["urbanmove"],
+    "timezone": "browser",
+    "refresh": "10s",
+    "time": { "from": "now-30m", "to": "now" },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Events Ingested (rate/min)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "rate(urbanmove_events_ingested_total[1m]) * 60",
+            "legendFormat": "{{event_type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 15, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Active Vehicles",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "sum(urbanmove_active_vehicles)",
+            "legendFormat": "Total"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 5 },
+                { "color": "green", "value": 20 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "WebSocket Connections",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "urbanmove_ws_connections",
+            "legendFormat": "Connections"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "steps": [
+                { "color": "blue", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "API Requests (rate/min)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "sum by (path) (rate(urbanmove_api_requests_total[1m]) * 60)",
+            "legendFormat": "{{path}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 10, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Auth Attempts (rate/min)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "rate(urbanmove_auth_attempts_total[1m]) * 60",
+            "legendFormat": "{{method}} — {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 10, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Analytics Processing Latency",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(urbanmove_analytics_latency_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(urbanmove_analytics_latency_seconds_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(urbanmove_analytics_latency_seconds_bucket[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 10, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Ingest Latency",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(urbanmove_ingest_latency_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(urbanmove_ingest_latency_seconds_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(urbanmove_ingest_latency_seconds_bucket[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 10, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Analytics Events Processed (rate/min)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "rate(urbanmove_analytics_processed_total[1m]) * 60",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 15, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Service CPU Usage",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total[1m]) * 100",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 10, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Service Memory Usage",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "color": { "mode": "palette-classic" },
+            "custom": { "fillOpacity": 10, "lineWidth": 2, "spanNulls": true }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Service Up/Down",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+        "datasource": { "type": "prometheus", "uid": "" },
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+            ],
+            "color": { "mode": "fixed" }
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "textMode": "value_and_name"
+        }
+      }
+    ],
+    "schemaVersion": 39
+  },
+  "overwrite": true
+}

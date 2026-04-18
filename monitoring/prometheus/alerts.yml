@@ -1,0 +1,16 @@
+groups:
+  - name: urbanmove
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "{{ $labels.job }} is down"}
+      - alert: HighIngestLatency
+        expr: histogram_quantile(0.95, rate(urbanmove_ingest_latency_seconds_bucket[5m])) > 0.5
+        for: 3m
+        labels: {severity: warning}
+      - alert: HighCongestion
+        expr: urbanmove_congestion_level > 90
+        for: 10m
+        labels: {severity: warning}
