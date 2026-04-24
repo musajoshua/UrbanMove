@@ -137,6 +137,17 @@ services:
     depends_on:
       - user-api
 
+  api-gateway:
+    build: ./services/api-gateway
+    ports: ["80:80"]
+    depends_on:
+      - auth-service
+      - ingestion-service
+      - analytics-service
+      - fleet-service
+      - user-api
+      - web-dashboard
+
   prometheus:
     image: prom/prometheus:v2.51.0
     ports: ["9090:9090"]
@@ -156,8 +167,51 @@ services:
     depends_on:
       - prometheus
 
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports: ["9093:9093"]
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    depends_on:
+      - prometheus
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports: ["9200:9200"]
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    volumes:
+      - ./monitoring/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    environment:
+      LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+    ports: ["5044:5044", "5000:5000/udp"]
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports: ["5601:5601"]
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+
 volumes:
   postgres_data:
   timescale_data:
   prometheus_data:
   grafana_data:
+  elasticsearch_data:

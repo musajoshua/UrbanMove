@@ -1,0 +1,190 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: eu-west-3
+  EKS_CLUSTER: urbanmove-cluster
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-3.amazonaws.com
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # CI — lint, type-check, and build every TypeScript service
+  # ---------------------------------------------------------------------------
+  ci:
+    name: CI · ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth-service
+            path: services/auth-service
+            has_ts: true
+          - service: ingestion-service
+            path: services/ingestion-service
+            has_ts: true
+          - service: analytics-service
+            path: services/analytics-service
+            has_ts: true
+          - service: fleet-service
+            path: services/fleet-service
+            has_ts: true
+          - service: user-api
+            path: services/user-api
+            has_ts: true
+          - service: web-dashboard
+            path: services/web-dashboard
+            has_ts: true
+          - service: api-gateway
+            path: services/api-gateway
+            has_ts: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        if: matrix.has_ts
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+
+      - name: Install dependencies
+        if: matrix.has_ts
+        working-directory: ${{ matrix.path }}
+        run: npm ci
+
+      - name: Lint
+        if: matrix.has_ts
+        working-directory: ${{ matrix.path }}
+        run: npx tsc --noEmit
+
+      - name: Build
+        if: matrix.has_ts
+        working-directory: ${{ matrix.path }}
+        run: npm run build
+
+      - name: Build Docker image
+        working-directory: ${{ matrix.path }}
+        run: docker build -t ${{ matrix.service }}:ci .
+
+  # ---------------------------------------------------------------------------
+  # CD — push images to ECR and deploy to EKS (main branch only)
+  # ---------------------------------------------------------------------------
+  cd:
+    name: CD · ${{ matrix.service }}
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - ingestion-service
+          - analytics-service
+          - fleet-service
+          - user-api
+          - web-dashboard
+          - api-gateway
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        working-directory: services/${{ matrix.service }}
+        env:
+          IMAGE: ${{ env.ECR_REGISTRY }}/${{ matrix.service }}
+          SHA_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t "${IMAGE}:${SHA_TAG}" \
+            -t "${IMAGE}:latest" \
+            .
+          docker push "${IMAGE}:${SHA_TAG}"
+          docker push "${IMAGE}:latest"
+
+  deploy:
+    name: Deploy to EKS
+    needs: cd
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ env.EKS_CLUSTER }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Set image tags via Kustomize
+        working-directory: infrastructure/k8s/base
+        env:
+          REGISTRY: ${{ env.ECR_REGISTRY }}
+          TAG: ${{ github.sha }}
+        run: |
+          SERVICES=(
+            auth-service
+            ingestion-service
+            analytics-service
+            fleet-service
+            user-api
+            web-dashboard
+            api-gateway
+          )
+          for svc in "${SERVICES[@]}"; do
+            kustomize edit set image "ECR_REGISTRY/${svc}=${REGISTRY}/${svc}:${TAG}"
+          done
+
+      - name: Apply Kubernetes manifests
+        run: kustomize build infrastructure/k8s/base | kubectl apply -f -
+
+      - name: Wait for rollouts
+        run: |
+          SERVICES=(
+            auth-service
+            ingestion-service
+            analytics-service
+            fleet-service
+            user-api
+            web-dashboard
+            api-gateway
+          )
+          for svc in "${SERVICES[@]}"; do
+            kubectl rollout status deployment/"${svc}" -n urbanmove --timeout=300s || true
+          done

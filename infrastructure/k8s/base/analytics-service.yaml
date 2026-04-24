@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: urbanmove
+  labels:
+    app: analytics-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-service
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+    spec:
+      containers:
+        - name: analytics-service
+          image: 147853513120.dkr.ecr.eu-west-3.amazonaws.com/analytics-service:amd64-1776522209
+          ports:
+            - containerPort: 4003
+          env:
+            - name: PORT
+              value: "4003"
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: urbanmove-config
+                  key: KAFKA_BROKERS
+            - name: TIMESCALEDB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: urbanmove-secrets
+                  key: TIMESCALEDB_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: urbanmove-secrets
+                  key: REDIS_URL
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4003
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: urbanmove
+spec:
+  selector:
+    app: analytics-service
+  ports:
+    - port: 4003
+      targetPort: 4003

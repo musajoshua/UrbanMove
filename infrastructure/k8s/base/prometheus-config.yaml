@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: urbanmove
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["alertmanager:9093"]
+
+    rule_files: ["alerts.yml"]
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs: [{targets: ["localhost:9090"]}]
+      - job_name: auth-service
+        static_configs: [{targets: ["auth-service:4001"]}]
+      - job_name: ingestion-service
+        static_configs: [{targets: ["ingestion-service:4002"]}]
+      - job_name: analytics-service
+        static_configs: [{targets: ["analytics-service:4003"]}]
+      - job_name: fleet-service
+        static_configs: [{targets: ["fleet-service:4004"]}]
+      - job_name: user-api
+        static_configs: [{targets: ["user-api:4005"]}]
+      - job_name: web-dashboard
+        static_configs: [{targets: ["web-dashboard:3000"]}]
+      - job_name: api-gateway
+        metrics_path: /stub_status
+        static_configs: [{targets: ["api-gateway:80"]}]
+
+  alerts.yml: |
+    groups:
+      - name: urbanmove
+        rules:
+          - alert: ServiceDown
+            expr: up == 0
+            for: 1m
+            labels: {severity: critical}
+            annotations: {summary: "{{ $labels.job }} is down"}
+          - alert: HighIngestLatency
+            expr: histogram_quantile(0.95, rate(urbanmove_ingest_latency_seconds_bucket[5m])) > 0.5
+            for: 3m
+            labels: {severity: warning}
+          - alert: HighCongestion
+            expr: urbanmove_congestion_level > 90
+            for: 10m
+            labels: {severity: warning}

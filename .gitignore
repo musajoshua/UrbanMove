@@ -4,3 +4,7 @@ dist/
 *.log
 .terraform/
 *.tfstate*
+*.tfvars
+*.pem
+*.key
+credentials.json

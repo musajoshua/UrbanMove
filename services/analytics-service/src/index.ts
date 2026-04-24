@@ -19,18 +19,29 @@ const congestionGauge = new Gauge({ name: "urbanmove_congestion_level", help: "C
 const tsPool = new pg.Pool({ connectionString: process.env.TIMESCALEDB_URL || "postgres://urbanmove:dev_password@localhost:5433/urbanmove_ts", max: 10 });
 const redis = createClient({ url: process.env.REDIS_URL || "redis://:dev_redis_pass@localhost:6379" });
 
+let hasTimescaleDB = false;
+
 async function initDB() {
   const c = await tsPool.connect();
   try {
     await c.query(`
       CREATE TABLE IF NOT EXISTS vehicle_positions (time TIMESTAMPTZ NOT NULL, vehicle_id TEXT, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, speed DOUBLE PRECISION, heading INTEGER, vehicle_type TEXT);
-      SELECT create_hypertable('vehicle_positions', 'time', if_not_exists => TRUE);
       CREATE TABLE IF NOT EXISTS traffic_aggregates (time TIMESTAMPTZ NOT NULL, zone TEXT, avg_speed DOUBLE PRECISION, vehicle_count INTEGER, congestion_score DOUBLE PRECISION);
-      SELECT create_hypertable('traffic_aggregates', 'time', if_not_exists => TRUE);
       CREATE TABLE IF NOT EXISTS incidents (time TIMESTAMPTZ NOT NULL, incident_type TEXT, severity INTEGER, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, estimated_duration_min INTEGER, resolved BOOLEAN DEFAULT FALSE);
-      SELECT create_hypertable('incidents', 'time', if_not_exists => TRUE);
     `);
-    logger.info("TimescaleDB initialized");
+    try {
+      await c.query(`CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE`);
+      await c.query(`SELECT create_hypertable('vehicle_positions', 'time', if_not_exists => TRUE)`);
+      await c.query(`SELECT create_hypertable('traffic_aggregates', 'time', if_not_exists => TRUE)`);
+      await c.query(`SELECT create_hypertable('incidents', 'time', if_not_exists => TRUE)`);
+      hasTimescaleDB = true;
+      logger.info("TimescaleDB hypertables initialized");
+    } catch {
+      logger.warn("TimescaleDB not available, using standard PostgreSQL tables");
+      await c.query(`CREATE INDEX IF NOT EXISTS idx_vp_time ON vehicle_positions(time DESC)`);
+      await c.query(`CREATE INDEX IF NOT EXISTS idx_ta_time ON traffic_aggregates(time DESC)`);
+      await c.query(`CREATE INDEX IF NOT EXISTS idx_inc_time ON incidents(time DESC)`);
+    }
   } finally { c.release(); }
 }
 
@@ -96,7 +107,10 @@ app.get("/api/v1/analytics/congestion", async (_req, res) => {
 
 app.get("/api/v1/analytics/trends", async (req, res) => {
   const hours = parseInt(req.query.hours as string) || 24;
-  const r = await tsPool.query(`SELECT time_bucket('1 hour', time) AS bucket, AVG(avg_speed) AS avg_speed, SUM(vehicle_count) AS total_vehicles FROM traffic_aggregates WHERE time > NOW() - make_interval(hours => $1) GROUP BY bucket ORDER BY bucket`, [hours]);
+  const query = hasTimescaleDB
+    ? `SELECT time_bucket('1 hour', time) AS bucket, AVG(avg_speed) AS avg_speed, SUM(vehicle_count) AS total_vehicles FROM traffic_aggregates WHERE time > NOW() - make_interval(hours => $1) GROUP BY bucket ORDER BY bucket`
+    : `SELECT date_trunc('hour', time) AS bucket, AVG(avg_speed) AS avg_speed, SUM(vehicle_count) AS total_vehicles FROM traffic_aggregates WHERE time > NOW() - ($1 || ' hours')::interval GROUP BY bucket ORDER BY bucket`;
+  const r = await tsPool.query(query, [hours]);
   res.json({ trends: r.rows });
 });
 
